@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic Tac Toe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .cell-animation {
+            animation: fadeIn 0.3s ease-out;
+        }
+        .winning-cell {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            animation: pulse 0.5s ease-in-out;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-purple-50 to-blue-50 min-h-screen flex items-center justify-center p-4">
+    <div id="root"></div>
+
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const API_BASE_URL = 'http://localhost:5000/api';
+
+        function TicTacToe() {
+            const [gameId, setGameId] = useState(null);
+            const [board, setBoard] = useState(Array(9).fill('-'));
+            const [currentPlayer, setCurrentPlayer] = useState('X');
+            const [winner, setWinner] = useState(null);
+            const [isDraw, setIsDraw] = useState(false);
+            const [gameOver, setGameOver] = useState(false);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [aiMode, setAiMode] = useState(false);
+            const [showModeSelection, setShowModeSelection] = useState(true);
+
+            const startNewGame = async (isAiMode = false) => {
+                setLoading(true);
+                setError(null);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/game/new`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ai_mode: isAiMode })
+                    });
+                    const data = await response.json();
+                    setGameId(data.game_id);
+                    setBoard(data.board);
+                    setCurrentPlayer(data.current_player);
+                    setWinner(null);
+                    setIsDraw(false);
+                    setGameOver(false);
+                    setAiMode(isAiMode);
+                    setShowModeSelection(false);
+                } catch (err) {
+                    setError('Failed to start new game. Make sure the backend is running.');
+                    console.error(err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const makeMove = async (position) => {
+                if (gameOver || board[position] !== '-' || loading) return;
+
+                setLoading(true);
+                setError(null);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/game/${gameId}/move`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ position })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to make move');
+                    }
+
+                    const data = await response.json();
+                    setBoard(data.board);
+                    setCurrentPlayer(data.current_player);
+                    setWinner(data.winner);
+                    setIsDraw(data.is_draw);
+                    setGameOver(data.game_over);
+                    
+                    // Show AI move notification if present
+                    if (data.ai_move !== null && data.ai_move !== undefined) {
+                        console.log(`AI played position ${data.ai_move + 1}`);
+                    }
+                } catch (err) {
+                    setError(err.message);
+                    console.error(err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const getCellValue = (index) => {
+                return board[index] !== '-' ? board[index] : '';
+            };
+
+            const getCellColor = (value) => {
+                if (value === 'X') return 'text-blue-600';
+                if (value === 'O') return 'text-red-600';
+                return 'text-gray-400';
+            };
+
+            // Mode selection screen
+            if (showModeSelection) {
+                return (
+                    <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8">
+                        <div className="text-center mb-8">
+                            <h1 className="text-4xl font-bold text-gray-800 mb-2">Tic Tac Toe</h1>
+                            <p className="text-gray-600">Choose your game mode</p>
+                        </div>
+
+                        {error && (
+                            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                {error}
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            <button
+                                onClick={() => startNewGame(false)}
+                                disabled={loading}
+                                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 px-6 rounded-xl font-semibold text-lg
+                                         hover:from-blue-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105
+                                         active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed
+                                         flex items-center justify-center gap-3"
+                            >
+                                <span>👥</span>
+                                <span>Two Players</span>
+                            </button>
+
+                            <button
+                                onClick={() => startNewGame(true)}
+                                disabled={loading}
+                                className="w-full bg-gradient-to-r from-green-600 to-teal-600 text-white py-4 px-6 rounded-xl font-semibold text-lg
+                                         hover:from-green-700 hover:to-teal-700 transition-all duration-200 transform hover:scale-105
+                                         active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed
+                                         flex items-center justify-center gap-3"
+                            >
+                                <span>🤖</span>
+                                <span>Play vs AI</span>
+                            </button>
+                        </div>
+
+                        <div className="mt-6 text-center text-sm text-gray-500">
+                            <p>Challenge a friend or test your skills against the AI!</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8">
+                    <div className="text-center mb-8">
+                        <h1 className="text-4xl font-bold text-gray-800 mb-2">Tic Tac Toe</h1>
+                        <p className="text-gray-600">
+                            {aiMode ? '🤖 Playing vs AI' : '👥 Two Players'}
+                        </p>
+                    </div>
+
+                    {error && (
+                        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="mb-6 text-center">
+                        {gameOver ? (
+                            <div className="text-2xl font-bold">
+                                {winner ? (
+                                    <span className={`${getCellColor(winner)}`}>
+                                        {aiMode && winner === 'O' ? 'AI Wins! 🤖' : aiMode && winner === 'X' ? 'You Win! 🎉' : `Player ${winner} Wins! 🎉`}
+                                    </span>
+                                ) : isDraw ? (
+                                    <span className="text-gray-700">It's a Draw! 🤝</span>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <div className="text-xl font-semibold text-gray-700">
+                                {aiMode ? (
+                                    currentPlayer === 'X' ? 'Your Turn' : 'AI is thinking...'
+                                ) : (
+                                    <>
+                                        Current Player: 
+                                        <span className={`ml-2 ${getCellColor(currentPlayer)}`}>
+                                            {currentPlayer}
+                                        </span>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3 mb-6">
+                        {board.map((cell, index) => {
+                            const value = getCellValue(index);
+                            return (
+                                <button
+                                    key={index}
+                                    onClick={() => makeMove(index)}
+                                    disabled={loading || gameOver || cell !== '-'}
+                                    className={`
+                                        aspect-square rounded-xl text-4xl font-bold
+                                        transition-all duration-200 transform
+                                        ${cell === '-' && !gameOver
+                                            ? 'bg-gray-50 hover:bg-gray-100 hover:scale-105 active:scale-95 cursor-pointer'
+                                            : 'bg-gray-50 cursor-not-allowed'
+                                        }
+                                        ${value ? 'cell-animation' : ''}
+                                        ${getCellColor(value)}
+                                        shadow-md hover:shadow-lg
+                                        disabled:opacity-50
+                                        flex items-center justify-center
+                                    `}
+                                >
+                                    {value}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => startNewGame(aiMode)}
+                            disabled={loading}
+                            className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-6 rounded-xl font-semibold
+                                     hover:from-purple-700 hover:to-blue-700 transition-all duration-200 transform hover:scale-105
+                                     active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loading ? 'Loading...' : 'New Game'}
+                        </button>
+                        <button
+                            onClick={() => setShowModeSelection(true)}
+                            disabled={loading}
+                            className="bg-gray-200 text-gray-700 py-3 px-6 rounded-xl font-semibold
+                                     hover:bg-gray-300 transition-all duration-200 transform hover:scale-105
+                                     active:scale-95 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Change Mode
+                        </button>
+                    </div>
+
+                    <div className="mt-6 text-center text-sm text-gray-500">
+                        <p>Player X: <span className="text-blue-600 font-semibold">Blue</span></p>
+                        <p>Player O: <span className="text-red-600 font-semibold">Red</span></p>
+                        {aiMode && <p className="mt-2 text-green-600 font-semibold">You are X, AI is O</p>}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<TicTacToe />);
+    </script>
+</body>
+</html>
